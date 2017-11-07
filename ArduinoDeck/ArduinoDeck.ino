@@ -4,15 +4,15 @@
    Tested with 2.8" TFT touchscreen and ArduinoMEGA.
    Please visit the Github in order to setup the files in order to run the program correctly.
    https://github.com/MikeJewski/ArduinoDeck
-   
+
    By MikeJewski
 
    Note:  If using this program, an SD card MUST be inserted into the LCD screen in order
-   for these images to be displayed. All files must be BMP files. If required, a bmp converter 
+   for these images to be displayed. All files must be BMP files. If required, a bmp converter
    can be found on the main Github page
-   
+
    Much of this layout borrows from William Tavares numpad program,
-   
+
    https://github.com/williamtavares/Arduino-Uno-NumPad
 */
 
@@ -50,12 +50,13 @@
 #define PURPLE  0x801F
 #define WHITE   0xFFFF
 
-#define MINPRESSURE 1
+#define MINPRESSURE_PRESS 150
+#define MINPRESSURE_RELEASE 10
 #define MAXPRESSURE 1000
 
 
-//SD Card 
-#define SD_CS 10 
+//SD Card
+#define SD_CS 10
 
 // For better pressure precision, we need to know the resistance
 // between X+ and X- Use any multimeter to read it
@@ -81,6 +82,8 @@ int TS_MINX 130
 int TS_MINY 85
 int TS_MAXX 890
 int TS_MAXY 910
+
+int lastPressure = 0;
 
 //Container variables for touch coordinates
 int X, Y, Z;
@@ -120,7 +123,7 @@ double R1 = info + edge;
 double R2 = R1 + BOXSIZE + padding;
 double R3 = R2 + BOXSIZE + padding;
 
-int col[] = {C1,C2,C3,C4,C5}; 
+int col[] = {C1,C2,C3,C4,C5};
 int row[] = {R1,R2,R3};
 
 String files[] = {"Discord.bmp","Spotify.bmp","VolDown.bmp","VolUp.bmp","OBS.bmp","Mic0.bmp","Disabled.bmp","Disabled.bmp","Disabled.bmp","Disabled.bmp","Disabled.bmp","Disabled.bmp","Disabled.bmp","Disabled.bmp","Play.bmp"};
@@ -131,7 +134,7 @@ void setup() {
 
   tft.reset();
   uint16_t identifier = tft.readID();
-  
+
   tft.begin(identifier);
 
   Serial.print(F("Initializing SD card..."));
@@ -141,7 +144,7 @@ void setup() {
   }
   Serial.println(F("OK!"));
   //Rotate 90 degrees
-   
+
   //TODO: Fix Adafruit_TFT to apply correct screen dimensions on rotation.
   tft.setRotation(1);
 
@@ -189,7 +192,7 @@ void calibrateDisplay() {
            }
            break;
      }
-     
+
      digitalWrite(13, HIGH);
      TSPoint p = ts.getPoint();
      digitalWrite(13, LOW);
@@ -197,8 +200,8 @@ void calibrateDisplay() {
      //If sharing pins, you'll need to fix the directions of the touchscreen pins
      pinMode(XM, OUTPUT);
      pinMode(YP, OUTPUT);
-     
-     if (p.z > 550) {
+
+     if (p.z > MINPRESSURE_PRESS && lastPressure < MINPRESSURE_RELEASE) {
          switch(calibrationStage) {
             case 0:
                TS_MAXX = p.x;
@@ -222,27 +225,28 @@ void calibrateDisplay() {
                break;
          }
      }
+     lastPressure = p.z;
   }
 }
 
 void drawBoxes(){
   for(int j = 0; j<3; j++){
-    for(int i = 0; i<5; i++){ 
+    for(int i = 0; i<5; i++){
       tft.drawRect(col[i],row[j],BOXSIZE,BOXSIZE,WHITE);
     }
   }
 
   tft.drawRect(edge,edge,tft.width()-padding,info-edge ,WHITE);
-  
+
 }
 
 char fileName[100];
- 
+
 void bmp(){
   button = 0;
   for(int j = 0; j<3; j++){
     for(int i = 0; i<5; i++){
-      files[button].toCharArray(fileName,100); 
+      files[button].toCharArray(fileName,100);
       bmpDraw(fileName,col[i]+1,row[j]+1);
       button = button+1;
     }
@@ -269,7 +273,7 @@ void getState(){
   for( int i = 0; i<15; i++){
     val = files[i].charAt(files[i].length()-5);
     if(val == "1"){
-      Buttons[i] = 1;    
+      Buttons[i] = 1;
     }
   }
 }
@@ -288,7 +292,7 @@ void retrieveTouch()
   X = map(p.y, TS_MAXY, TS_MINY, 0, tft.width());
   Y = map(p.x, TS_MAXX, TS_MINX, 0, tft.height());
   Z = p.z;
-  
+
 }
 
 void chooseButton(){
@@ -297,7 +301,7 @@ void chooseButton(){
       for(int i = 0; i<5; i++){
         if(X > col[i] &&  X < col[i] + BOXSIZE){
           if(Y > row[j] && Y < row[j] + BOXSIZE){
-            
+
             drawBoxes();
             tft.drawRect(col[i],row[j],BOXSIZE,BOXSIZE,RED);
             Serial.println((j*5)+i+1);
@@ -315,7 +319,7 @@ void chooseButton(){
               bmpDraw(fileName,col[i]+1,row[j]+1);
             }
             memset(fileName, 0, sizeof newVal);
-            temp = ""; 
+            temp = "";
             delay(50);
           }
         }
@@ -387,14 +391,14 @@ void bmpDraw(char *filename, int x, int y) {
 
   // Parse BMP header
   if(read16(bmpFile) == 0x4D42) { // BMP signature
-    //Serial.println(F("File size: ")); 
+    //Serial.println(F("File size: "));
     read32(bmpFile);
     (void)read32(bmpFile); // Read & ignore creator bytes
     bmpImageoffset = read32(bmpFile); // Start of image data
-    //Serial.print(F("Image Offset: ")); 
+    //Serial.print(F("Image Offset: "));
     (bmpImageoffset, DEC);
     // Read DIB header
-    //Serial.print(F("Header size: ")); 
+    //Serial.print(F("Header size: "));
     read32(bmpFile);
     bmpWidth  = read32(bmpFile);
     bmpHeight = read32(bmpFile);
@@ -467,7 +471,7 @@ void bmpDraw(char *filename, int x, int y) {
         // Write any remaining data to LCD
         if(lcdidx > 0) {
           tft.pushColors(lcdbuffer, lcdidx, first);
-        } 
+        }
         //Serial.print(F("Loaded in "));
         //Serial.print(millis() - startTime);
         //Serial.println(" ms");
