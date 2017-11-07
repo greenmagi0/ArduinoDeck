@@ -54,6 +54,12 @@
 #define MINPRESSURE_RELEASE 10
 #define MAXPRESSURE 1000
 
+enum buttonState {
+   off,     //0
+   on,      //1
+   action,  //2
+   folder   //3
+};
 
 //SD Card
 #define SD_CS 10
@@ -88,23 +94,6 @@ int lastPressure = 0;
 //Container variables for touch coordinates
 int X, Y, Z;
 
-//State for changing images
-int Button1 = 0;
-int Button2 = 0;
-int Button3 = 0;
-int Button4 = 0;
-int Button5 = 0;
-int Button6 = 0;
-int Button7 = 0;
-int Button8 = 0;
-int Button9 = 0;
-int Button10 = 0;
-int Button11 = 0;
-int Button12 = 0;
-int Button13 = 0;
-int Button14 = 0;
-int Button15 = 0;
-
 int calibrationStage = 0;
 
 //Space between squares
@@ -126,8 +115,8 @@ double R3 = R2 + BOXSIZE + padding;
 int col[] = {C1,C2,C3,C4,C5};
 int row[] = {R1,R2,R3};
 
-String files[] = {"Discord.bmp","Spotify.bmp","VolDown.bmp","VolUp.bmp","OBS.bmp","Mic0.bmp","Disabled.bmp","Disabled.bmp","Disabled.bmp","Disabled.bmp","Disabled.bmp","Disabled.bmp","Disabled.bmp","Disabled.bmp","Play.bmp"};
-int Buttons[] = {Button1,Button2,Button3,Button4,Button5,Button6,Button7,Button8,Button9,Button10,Button11,Button12,Button13,Button14,Button15};
+String buttonFiles[215];
+buttonState buttonStates[215];
 
 void setup() {
   Serial.begin(9600);
