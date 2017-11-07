@@ -28,13 +28,6 @@
 #define YM 9   // can be a digital pin
 #define XP 8   // can be a digital pin
 
-// calibration mins and max for raw data when touching edges of screen
-// YOU CAN USE THIS SKETCH TO DETERMINE THE RAW X AND Y OF THE EDGES TO GET YOUR HIGHS AND LOWS FOR X AND Y
-#define TS_MINX 130
-#define TS_MINY 85
-#define TS_MAXX 890
-#define TS_MAXY 910
-
 //SPI Communication
 #define LCD_CS A3
 #define LCD_CD A2
@@ -82,6 +75,12 @@ extern uint8_t crossout[];
 extern uint8_t viewer[];
 extern uint8_t analogClock[];
 
+// calibration mins and max for raw data when touching edges of screen
+// YOU CAN USE THIS SKETCH TO DETERMINE THE RAW X AND Y OF THE EDGES TO GET YOUR HIGHS AND LOWS FOR X AND Y
+int TS_MINX 130
+int TS_MINY 85
+int TS_MAXX 890
+int TS_MAXY 910
 
 //Container variables for touch coordinates
 int X, Y, Z;
@@ -102,6 +101,8 @@ int Button12 = 0;
 int Button13 = 0;
 int Button14 = 0;
 int Button15 = 0;
+
+int calibrationStage = 0;
 
 //Space between squares
 double padding = 4;
@@ -140,16 +141,89 @@ void setup() {
   }
   Serial.println(F("OK!"));
   //Rotate 90 degrees
+   
+  //TODO: Fix Adafruit_TFT to apply correct screen dimensions on rotation.
   tft.setRotation(1);
 
   //Background color
+  tft.fillScreen(WHITE);
+  calibrateDisplay();
   tft.fillScreen(BLACK);
-
   drawBoxes();
   bmp();
   getState();
 }
+
 int button = 0;
+
+void calibrateDisplay() {
+   int lastDraw = -1;
+  //Four points to calibrate the display automatically
+  while (calibrationStage < 4) {
+     switch(calibrationStage) {
+        case 0:
+           if (lastDraw != 0) {
+              tft.drawRect(40,40,4,4,BLACK);
+              lastDraw = 0;
+           }
+           break;
+        case 1:
+           if (lastDraw != 1) {
+              tft.fillRect(40,40,4,4,BLACK);
+              tft.drawRect(280,40,4,4,BLACK);
+              lastDraw = 1;
+           }
+           break;
+        case 2:
+           if (lastDraw != 2) {
+              tft.fillRect(280,40,4,4,BLACK);
+              tft.drawRect(40,200,4,4,BLACK);
+              lastDraw = 2;
+           }
+           break;
+        case 3:
+           if (lastDraw != 3) {
+              tft.fillRect(40,200,4,4,BLACK);
+              tft.drawRect(280,200,4,4,BLACK);
+              lastDraw = 3;
+           }
+           break;
+     }
+     
+     digitalWrite(13, HIGH);
+     TSPoint p = ts.getPoint();
+     digitalWrite(13, LOW);
+
+     //If sharing pins, you'll need to fix the directions of the touchscreen pins
+     pinMode(XM, OUTPUT);
+     pinMode(YP, OUTPUT);
+     
+     if (p.z > 550) {
+         switch(calibrationStage) {
+            case 0:
+               TS_MAXX = p.x;
+               TS_MAXY = p.y;
+               calibrationStage++;
+               break;
+            case 1:
+               TS_MINX = p.x;
+               TS_MAXY = (TS_MAXY + p.y) / 2;
+               calibrationStage++;
+               break;
+            case 2:
+               TS_MAXX = (TS_MAXX + p.x) / 2;
+               TS_MINY = p.y;
+               calibrationStage++;
+               break;
+            case 3:
+               TS_MINX = (TS_MINX + p.x) / 2;
+               TS_MINY = (TS_MINX + p.y) / 2;
+               calibrationStage++;
+               break;
+         }
+     }
+  }
+}
 
 void drawBoxes(){
   for(int j = 0; j<3; j++){
