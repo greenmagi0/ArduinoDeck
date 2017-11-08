@@ -84,15 +84,17 @@ extern uint8_t analogClock[];
 
 // calibration mins and max for raw data when touching edges of screen
 // YOU CAN USE THIS SKETCH TO DETERMINE THE RAW X AND Y OF THE EDGES TO GET YOUR HIGHS AND LOWS FOR X AND Y
-int TS_MINX 130
-int TS_MINY 85
-int TS_MAXX 890
-int TS_MAXY 910
+int TS_MINX = 130;
+int TS_MINY = 85;
+int TS_MAXX = 890;
+int TS_MAXY = 910;
 
+long lastUpdatedTime = 0;
 int lastPressure = 0;
 
 //Container variables for touch coordinates
 int X, Y, Z;
+int rawX, rawY, pressure;
 
 int calibrationStage = 0;
 
@@ -115,8 +117,27 @@ double R3 = R2 + BOXSIZE + padding;
 int col[] = {C1,C2,C3,C4,C5};
 int row[] = {R1,R2,R3};
 
-String buttonFiles[215];
-buttonState buttonStates[215];
+//String buttonFiles[215];
+//buttonState buttonStates[215];
+//State for changing images
+int Button1 = 0;
+int Button2 = 0;
+int Button3 = 0;
+int Button4 = 0;
+int Button5 = 0;
+int Button6 = 0;
+int Button7 = 0;
+int Button8 = 0;
+int Button9 = 0;
+int Button10 = 0;
+int Button11 = 0;
+int Button12 = 0;
+int Button13 = 0;
+int Button14 = 0;
+int Button15 = 0;
+
+String files[] = {"prev.bmp","play.bmp","next.bmp","mute.bmp","volup.bmp","mic0.bmp","pubg.bmp","cod.bmp","dest.bmp","voldown.bmp","s10.bmp","s20.bmp","s30.bmp","s40.bmp","s50.bmp"};
+int Buttons[] = {Button1,Button2,Button3,Button4,Button5,Button6,Button7,Button8,Button9,Button10,Button11,Button12,Button13,Button14,Button15};
 
 void setup() {
   Serial.begin(9600);
@@ -182,40 +203,38 @@ void calibrateDisplay() {
            break;
      }
 
-     digitalWrite(13, HIGH);
-     TSPoint p = ts.getPoint();
-     digitalWrite(13, LOW);
+      getTouchRaw();
 
-     //If sharing pins, you'll need to fix the directions of the touchscreen pins
-     pinMode(XM, OUTPUT);
-     pinMode(YP, OUTPUT);
-
-     if (p.z > MINPRESSURE_PRESS && lastPressure < MINPRESSURE_RELEASE) {
+     if (pressure > MINPRESSURE_PRESS && lastPressure <= MINPRESSURE_RELEASE) {
          switch(calibrationStage) {
             case 0:
-               TS_MAXX = p.x;
-               TS_MAXY = p.y;
-               calibrationStage++;
+               TS_MAXX = rawX;
+               TS_MAXY = rawY;
                break;
             case 1:
-               TS_MINX = p.x;
-               TS_MAXY = (TS_MAXY + p.y) / 2;
-               calibrationStage++;
+               TS_MINY = rawY;
+               TS_MAXX = (TS_MAXX + rawX) / 2;
                break;
             case 2:
-               TS_MAXX = (TS_MAXX + p.x) / 2;
-               TS_MINY = p.y;
-               calibrationStage++;
+               TS_MAXY = (TS_MAXY + rawY) / 2;
+               TS_MINX = rawX;
                break;
             case 3:
-               TS_MINX = (TS_MINX + p.x) / 2;
-               TS_MINY = (TS_MINX + p.y) / 2;
-               calibrationStage++;
+               TS_MINX = (TS_MINX + rawX) / 2;
+               TS_MINY = (TS_MINX + rawY) / 2;
                break;
          }
+         Serial.print(rawX);
+         Serial.print(", ");
+         Serial.println(rawY);
+         calibrationStage++;
      }
-     lastPressure = p.z;
+     lastPressure = pressure;
   }
+  Serial.println(TS_MAXX);
+  Serial.println(TS_MAXY);
+  Serial.println(TS_MINX);
+  Serial.println(TS_MINY);
 }
 
 void drawBoxes(){
@@ -267,6 +286,24 @@ void getState(){
   }
 }
 
+void getTouchRaw()
+{
+  digitalWrite(13, HIGH);
+  TSPoint p = ts.getPoint();
+  digitalWrite(13, LOW);
+
+  //If sharing pins, you'll need to fix the directions of the touchscreen pins
+  pinMode(XM, OUTPUT);
+  pinMode(YP, OUTPUT);
+  
+  if (millis() > lastUpdatedTime + 40) {
+    rawX = p.x;
+    rawY = p.y;
+    pressure = (pressure + p.z) / 2;
+    lastUpdatedTime = millis();
+  }
+}
+
 void retrieveTouch()
 {
   digitalWrite(13, HIGH);
@@ -278,14 +315,18 @@ void retrieveTouch()
   pinMode(YP, OUTPUT);
 
   // on my tft the numbers are reversed so this is used instead of the above
-  X = map(p.y, TS_MAXY, TS_MINY, 0, tft.width());
-  Y = map(p.x, TS_MAXX, TS_MINX, 0, tft.height());
+  X = map(p.y, TS_MAXY, TS_MINY, 40, 280);
+  Y = map(p.x, TS_MAXX, TS_MINX, 40, 200);
   Z = p.z;
-
+  if (Z > MINPRESSURE_PRESS) {
+    Serial.print(X);
+    Serial.print(", ");
+    Serial.println(Y);
+  }
 }
 
 void chooseButton(){
-  if (Z > MINPRESSURE && Z < MAXPRESSURE){
+  if (Z > MINPRESSURE_PRESS && Z < MAXPRESSURE){
     for(int j = 0; j<3; j++){
       for(int i = 0; i<5; i++){
         if(X > col[i] &&  X < col[i] + BOXSIZE){
