@@ -54,6 +54,8 @@
 #define MINPRESSURE_RELEASE 10
 #define MAXPRESSURE 1000
 
+char* BUTTON_FILE = "buttons.cfg";
+
 enum buttonState {
    off,     //0
    on,      //1
@@ -139,6 +141,15 @@ int Button15 = 0;
 String files[] = {"prev.bmp","play.bmp","next.bmp","mute.bmp","volup.bmp","mic0.bmp","pubg.bmp","cod.bmp","dest.bmp","voldown.bmp","s10.bmp","s20.bmp","s30.bmp","s40.bmp","s50.bmp"};
 int Buttons[] = {Button1,Button2,Button3,Button4,Button5,Button6,Button7,Button8,Button9,Button10,Button11,Button12,Button13,Button14,Button15};
 
+int buttons[16][16];
+
+int settingsLoaded = 0;
+char settingsCommand[32];
+char commandValue[32];
+String settingBuffer;
+
+int settingsIndex = 0;
+
 void setup() {
   Serial.begin(9600);
 
@@ -159,8 +170,11 @@ void setup() {
   tft.setRotation(1);
 
   //Background color
-  tft.fillScreen(WHITE);
-  calibrateDisplay();
+  loadCalibrationSettings();
+  if( !settingsLoaded ) {
+    tft.fillScreen(WHITE);
+    calibrateDisplay();
+  }
   tft.fillScreen(BLACK);
   drawBoxes();
   bmp();
@@ -169,8 +183,35 @@ void setup() {
 
 int button = 0;
 
+void loadCalibrationSettings() {
+  Serial.println("Loading Settings");
+  File settings = SD.open("calib.cfg");
+  Serial.println(settings.available());
+  int tempIndex;
+  while ( settingBuffer = settings.readStringUntil('\n') ) {
+    settingsLoaded = 1;
+    tempIndex = settingBuffer.indexOf('=');
+    String command = settingBuffer.substring(0, tempIndex);
+    if (command.compareTo("MAXX") == 0) {
+        TS_MAXX = settingBuffer.substring(tempIndex + 1).toInt();
+    } else if (command.compareTo("MAXY") == 0) {
+        TS_MAXY = settingBuffer.substring(tempIndex + 1).toInt();
+    } else if (command.compareTo("MINX") == 0) {
+        TS_MINX = settingBuffer.substring(tempIndex + 1).toInt();
+    } else if (command.compareTo("MINY") == 0) {
+        TS_MINY = settingBuffer.substring(tempIndex + 1).toInt();
+    } else if (settingBuffer.compareTo("") == 0) {
+      break;
+    } else {
+      settingsLoaded = 0;
+      //Serial.println("Failed: " + command);
+    }
+  }
+  settings.close();
+}
+
 void calibrateDisplay() {
-   int lastDraw = -1;
+  int lastDraw = -1;
   //Four points to calibrate the display automatically
   while (calibrationStage < 4) {
      switch(calibrationStage) {
@@ -224,17 +265,17 @@ void calibrateDisplay() {
                TS_MINY = (TS_MINX + rawY) / 2;
                break;
          }
-         Serial.print(rawX);
-         Serial.print(", ");
-         Serial.println(rawY);
          calibrationStage++;
      }
      lastPressure = pressure;
   }
-  Serial.println(TS_MAXX);
-  Serial.println(TS_MAXY);
-  Serial.println(TS_MINX);
-  Serial.println(TS_MINY);
+  SD.remove("calib.cfg");
+  File settings = SD.open("calib.cfg", FILE_WRITE);
+  settings.println("MAXX=" + String(TS_MAXX));
+  settings.println("MAXY=" + String(TS_MAXY));
+  settings.println("MINX=" + String(TS_MINX));
+  settings.println("MINY=" + String(TS_MINY));
+  settings.close();
 }
 
 void drawBoxes(){
@@ -295,7 +336,8 @@ void getTouchRaw()
   //If sharing pins, you'll need to fix the directions of the touchscreen pins
   pinMode(XM, OUTPUT);
   pinMode(YP, OUTPUT);
-  
+
+  //Smooth our pressure to ensure we have consistent press and release cycles.
   if (millis() > lastUpdatedTime + 40) {
     rawX = p.x;
     rawY = p.y;
