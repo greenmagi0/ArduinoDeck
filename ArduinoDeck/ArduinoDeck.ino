@@ -54,15 +54,6 @@
 #define MINPRESSURE_RELEASE 10
 #define MAXPRESSURE 1000
 
-char* BUTTON_FILE = "buttons.cfg";
-
-enum buttonState {
-   off,     //0
-   on,      //1
-   action,  //2
-   folder   //3
-};
-
 //SD Card
 #define SD_CS 10
 
@@ -141,12 +132,13 @@ int Button15 = 0;
 String files[] = {"prev.bmp","play.bmp","next.bmp","mute.bmp","volup.bmp","mic0.bmp","pubg.bmp","cod.bmp","dest.bmp","voldown.bmp","s10.bmp","s20.bmp","s30.bmp","s40.bmp","s50.bmp"};
 int Buttons[] = {Button1,Button2,Button3,Button4,Button5,Button6,Button7,Button8,Button9,Button10,Button11,Button12,Button13,Button14,Button15};
 
+int activeButtonSet = 0;
 int buttons[16][16];
 
 int settingsLoaded = 0;
 char settingsCommand[32];
 char commandValue[32];
-String settingBuffer;
+String textBuffer;
 
 int settingsIndex = 0;
 
@@ -175,6 +167,7 @@ void setup() {
     tft.fillScreen(WHITE);
     calibrateDisplay();
   }
+  loadButtons();
   tft.fillScreen(BLACK);
   drawBoxes();
   bmp();
@@ -183,24 +176,41 @@ void setup() {
 
 int button = 0;
 
+void loadButtons() {
+  File buttoncfg = SD.open("buttons.cfg");
+  int tempIndex;
+  while ( textBuffer = buttoncfg.readStringUntil('\n') ) {
+    tempIndex = textBuffer.indexOf('=');
+    String command = textBuffer.substring(0, tempIndex);
+    int offset = command.toInt() / 16;
+    int index = command.toInt() % 16;
+    int tempInt = textBuffer.substring(tempIndex + 1).toInt();
+    buttons[offset][index] = tempInt;
+    if (textBuffer.compareTo("") == 0) {
+      break;
+    }
+  }
+  buttoncfg.close();
+}
+
 void loadCalibrationSettings() {
   Serial.println("Loading Settings");
   File settings = SD.open("calib.cfg");
   Serial.println(settings.available());
   int tempIndex;
-  while ( settingBuffer = settings.readStringUntil('\n') ) {
+  while ( textBuffer = settings.readStringUntil('\n') ) {
     settingsLoaded = 1;
-    tempIndex = settingBuffer.indexOf('=');
-    String command = settingBuffer.substring(0, tempIndex);
+    tempIndex = textBuffer.indexOf('=');
+    String command = textBuffer.substring(0, tempIndex);
     if (command.compareTo("MAXX") == 0) {
-        TS_MAXX = settingBuffer.substring(tempIndex + 1).toInt();
+        TS_MAXX = textBuffer.substring(tempIndex + 1).toInt();
     } else if (command.compareTo("MAXY") == 0) {
-        TS_MAXY = settingBuffer.substring(tempIndex + 1).toInt();
+        TS_MAXY = textBuffer.substring(tempIndex + 1).toInt();
     } else if (command.compareTo("MINX") == 0) {
-        TS_MINX = settingBuffer.substring(tempIndex + 1).toInt();
+        TS_MINX = textBuffer.substring(tempIndex + 1).toInt();
     } else if (command.compareTo("MINY") == 0) {
-        TS_MINY = settingBuffer.substring(tempIndex + 1).toInt();
-    } else if (settingBuffer.compareTo("") == 0) {
+        TS_MINY = textBuffer.substring(tempIndex + 1).toInt();
+    } else if (textBuffer.compareTo("") == 0) {
       break;
     } else {
       settingsLoaded = 0;
@@ -291,12 +301,26 @@ void drawBoxes(){
 
 char fileName[100];
 
+int iconInt = 0;
+String iconName;
+File iconBuffer;
+
 void bmp(){
   button = 0;
   for(int j = 0; j<3; j++){
     for(int i = 0; i<5; i++){
-      files[button].toCharArray(fileName,100);
-      bmpDraw(fileName,col[i]+1,row[j]+1);
+      iconInt = (activeButtonSet * 16) + (j * 5) + i;
+      iconName = String(iconInt, HEX);
+      iconName += ".bmp";
+      iconName.toCharArray(fileName, 100);
+      iconBuffer = SD.open(fileName);
+      if (iconBuffer.available() > 0) {
+        //files[button].toCharArray(fileName,100);
+        bmpDraw(fileName,col[i]+1,row[j]+1);
+      } else {
+        Serial.print("No button for ");
+        Serial.println(fileName);
+      }
       button = button+1;
     }
   }
@@ -360,12 +384,9 @@ void retrieveTouch()
   X = map(p.y, TS_MAXY, TS_MINY, 40, 280);
   Y = map(p.x, TS_MAXX, TS_MINX, 40, 200);
   Z = p.z;
-  if (Z > MINPRESSURE_PRESS) {
-    Serial.print(X);
-    Serial.print(", ");
-    Serial.println(Y);
-  }
 }
+
+int buttonId = 0;
 
 void chooseButton(){
   if (Z > MINPRESSURE_PRESS && Z < MAXPRESSURE){
@@ -373,11 +394,28 @@ void chooseButton(){
       for(int i = 0; i<5; i++){
         if(X > col[i] &&  X < col[i] + BOXSIZE){
           if(Y > row[j] && Y < row[j] + BOXSIZE){
-
+            buttonId = (j * 5) + i;
             drawBoxes();
             tft.drawRect(col[i],row[j],BOXSIZE,BOXSIZE,RED);
-            Serial.println((j*5)+i+1);
+            //Serial.println((j*5)+i+1);
             val = files[(j*5)+i].charAt(files[(j*5)+i].length()-5);
+            switch(buttons[activeButtonSet][buttonId]) {
+              case 0:
+              case 1:
+                //Toggle On/Off
+              break;
+              case 2:
+                //Normal Action
+              break;
+              case 3:
+                //Folder
+                activeButtonSet = buttonId;
+                bmp();
+              break;
+              default:
+                //Toggle Group
+              break;
+            }
             if(val == "1"){
               Buttons[(j*5)+i] = 0;
               files[(j*5)+i].replace("1","0");
