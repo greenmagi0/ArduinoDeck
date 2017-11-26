@@ -50,8 +50,8 @@
 #define PURPLE  0x801F
 #define WHITE   0xFFFF
 
-#define MINPRESSURE_PRESS 150
-#define MINPRESSURE_RELEASE 10
+#define MINPRESSURE_PRESS 100
+#define MINPRESSURE_RELEASE 25
 #define MAXPRESSURE 1000
 
 //SD Card
@@ -129,7 +129,7 @@ int Button13 = 0;
 int Button14 = 0;
 int Button15 = 0;
 
-String files[] = {"prev.bmp","play.bmp","next.bmp","mute.bmp","volup.bmp","mic0.bmp","pubg.bmp","cod.bmp","dest.bmp","voldown.bmp","s10.bmp","s20.bmp","s30.bmp","s40.bmp","s50.bmp"};
+String files[] = {"prev.bmp","play.bmp","next.bmp","mute.bmp","volup.bmp","mic1.bmp","pubg.bmp","dest.bmp","cod.bmp","voldown.bmp","s10.bmp","s20.bmp","s30.bmp","s40.bmp","s50.bmp"};
 int Buttons[] = {Button1,Button2,Button3,Button4,Button5,Button6,Button7,Button8,Button9,Button10,Button11,Button12,Button13,Button14,Button15};
 
 int activeButtonSet = 0;
@@ -310,7 +310,12 @@ void bmp(){
   for(int j = 0; j<3; j++){
     for(int i = 0; i<5; i++){
       iconInt = (activeButtonSet * 16) + (j * 5) + i;
-      iconName = String(iconInt, HEX);
+      if(activeButtonSet == 0) {
+        iconName = "0";
+        iconName += String(iconInt, HEX);
+      } else {
+        iconName = String(iconInt, HEX);
+      }
       iconName += ".bmp";
       iconName.toCharArray(fileName, 100);
       iconBuffer = SD.open(fileName);
@@ -318,8 +323,11 @@ void bmp(){
         //files[button].toCharArray(fileName,100);
         bmpDraw(fileName,col[i]+1,row[j]+1);
       } else {
-        Serial.print("No button for ");
-        Serial.println(fileName);
+//        Serial.println("CYAN: " + String(col[i] + 1) + ", " + String(col[j]+1));
+        //This requires removing the fillRect from the TFT files.
+        tft.fillRect(col[i]+1,row[j]+1,BOXSIZE-2,BOXSIZE-2,BLACK);
+//        Serial.print("No button for ");
+//        Serial.println(fileName);
       }
       button = button+1;
     }
@@ -362,7 +370,7 @@ void getTouchRaw()
   pinMode(YP, OUTPUT);
 
   //Smooth our pressure to ensure we have consistent press and release cycles.
-  if (millis() > lastUpdatedTime + 40) {
+  if (millis() > lastUpdatedTime + 16) {
     rawX = p.x;
     rawY = p.y;
     pressure = (pressure + p.z) / 2;
@@ -380,62 +388,82 @@ void retrieveTouch()
   pinMode(XM, OUTPUT);
   pinMode(YP, OUTPUT);
 
-  // on my tft the numbers are reversed so this is used instead of the above
-  X = map(p.y, TS_MAXY, TS_MINY, 40, 280);
-  Y = map(p.x, TS_MAXX, TS_MINX, 40, 200);
-  Z = p.z;
+  if (millis() > lastUpdatedTime + 16) {
+    pressure = (pressure + p.z) / 2;
+    lastUpdatedTime = millis();
+    // on my tft the numbers are reversed so this is used instead of the above
+    X = map(p.y, TS_MAXY, TS_MINY, 40, 280);
+    Y = map(p.x, TS_MAXX, TS_MINX, 40, 200);
+    Z = p.z;
+  }
 }
 
 int buttonId = 0;
+int lastButton[] = {NULL, NULL};
 
 void chooseButton(){
-  if (Z > MINPRESSURE_PRESS && Z < MAXPRESSURE){
+  if (pressure > MINPRESSURE_PRESS && lastPressure <= MINPRESSURE_RELEASE) {
     for(int j = 0; j<3; j++){
       for(int i = 0; i<5; i++){
         if(X > col[i] &&  X < col[i] + BOXSIZE){
           if(Y > row[j] && Y < row[j] + BOXSIZE){
             buttonId = (j * 5) + i;
-            drawBoxes();
-            tft.drawRect(col[i],row[j],BOXSIZE,BOXSIZE,RED);
+            //drawBoxes();
             //Serial.println((j*5)+i+1);
             val = files[(j*5)+i].charAt(files[(j*5)+i].length()-5);
             switch(buttons[activeButtonSet][buttonId]) {
               case 0:
               case 1:
                 //Toggle On/Off
+                buttons[activeButtonSet][buttonId] = !buttons[activeButtonSet][buttonId];
+                iconInt = (activeButtonSet * 16) + buttonId;
+                //Need to fix leading zero
+                if(activeButtonSet == 0) {
+                  iconName = "0";
+                  iconName += String(iconInt, HEX);
+                } else {
+                  iconName = String(iconInt, HEX);
+                }
+                iconName += String(buttons[activeButtonSet][buttonId]);
+                iconName += ".bmp";
+                iconName.toCharArray(fileName, 100);
+                iconBuffer = SD.open(fileName);
+                if (iconBuffer.available() > 0) {
+                  bmpDraw(fileName,col[i]+1,row[j]+1);
+                } else {
+                  Serial.print("No button for ");
+                  Serial.println(fileName);
+                }
+                bmpDraw(fileName,col[i]+1,row[j]+1);
+                tft.drawRect(col[i],row[j],BOXSIZE,BOXSIZE,RED);
               break;
               case 2:
                 //Normal Action
+                tft.drawRect(col[i],row[j],BOXSIZE,BOXSIZE,RED);
               break;
               case 3:
                 //Folder
                 activeButtonSet = buttonId;
+                tft.drawRect(col[i],row[j],BOXSIZE,BOXSIZE,BLUE);
                 bmp();
               break;
               default:
-                //Toggle Group
+                //Any other number is a Toggle Group. i.e. a 4 button will toggle all other 4's off and itself on.
+                tft.drawRect(col[i],row[j],BOXSIZE,BOXSIZE,RED);
               break;
             }
-            if(val == "1"){
-              Buttons[(j*5)+i] = 0;
-              files[(j*5)+i].replace("1","0");
-              files[(j*5)+i].toCharArray(fileName,100);
-              bmpDraw(fileName,col[i]+1,row[j]+1);
+            //Recolor the other red box.
+            if (lastButton[0] != NULL) {
+              tft.drawRect(lastButton[0], lastButton[1],BOXSIZE,BOXSIZE,WHITE);
             }
-            if(val == "0"){
-              Buttons[(j*5)+i] = 1;
-              files[(j*5)+i].replace("0","1");
-              files[(j*5)+i].toCharArray(fileName,100);
-              bmpDraw(fileName,col[i]+1,row[j]+1);
-            }
-            memset(fileName, 0, sizeof newVal);
-            temp = "";
-            delay(50);
+            lastButton[0] = col[i];
+            lastButton[1] = row[j];
           }
         }
       }
     }
   }
+  lastPressure = pressure;
 }
 
 void updateInfo(){
@@ -470,7 +498,7 @@ void updateInfo(){
 #define BUFFPIXEL 20
 
 void bmpDraw(char *filename, int x, int y) {
-
+  
   File     bmpFile;
   int      bmpWidth, bmpHeight;   // W+H in pixels
   uint8_t  bmpDepth;              // Bit depth (currently must be 24)
