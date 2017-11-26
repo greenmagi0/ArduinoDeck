@@ -1,4 +1,3 @@
-
 /*
    ArduinoDeck program written to interact with main ArduinoDeck program.
    Allows user control system functions, interact with Twitch, and controll OBS.
@@ -76,7 +75,6 @@ extern uint8_t crossout[];
 extern uint8_t viewer[];
 extern uint8_t analogClock[];
 
-
 // calibration mins and max for raw data when touching edges of screen
 // YOU CAN USE THIS SKETCH TO DETERMINE THE RAW X AND Y OF THE EDGES TO GET YOUR HIGHS AND LOWS FOR X AND Y
 int TS_MINX = 130;
@@ -92,23 +90,6 @@ int X, Y, Z;
 int rawX, rawY, pressure;
 
 int calibrationStage = 0;
-
-//State for changing images
-int Button1 = 0;
-int Button2 = 0;
-int Button3 = 0;
-int Button4 = 0;
-int Button5 = 0;
-int Button6 = 0;
-int Button7 = 0;
-int Button8 = 0;
-int Button9 = 0;
-int Button10 = 0;
-int Button11 = 0;
-int Button12 = 0;
-int Button13 = 0;
-int Button14 = 0;
-int Button15 = 0;
 
 //Space between squares
 double padding = 4;
@@ -129,8 +110,37 @@ double R3 = R2 + BOXSIZE + padding;
 int col[] = {C1,C2,C3,C4,C5};
 int row[] = {R1,R2,R3};
 
-String files[] = {"Discord.bmp","Spotify.bmp","VolDown.bmp","VolUp.bmp","OBS.bmp","Mic0.bmp","Disabled.bmp","Disabled.bmp","Disabled.bmp","Disabled.bmp","Disabled.bmp","Disabled.bmp","Disabled.bmp","Disabled.bmp","Play.bmp"};
+//String buttonFiles[215];
+//buttonState buttonStates[215];
+//State for changing images
+int Button1 = 0;
+int Button2 = 0;
+int Button3 = 0;
+int Button4 = 0;
+int Button5 = 0;
+int Button6 = 0;
+int Button7 = 0;
+int Button8 = 0;
+int Button9 = 0;
+int Button10 = 0;
+int Button11 = 0;
+int Button12 = 0;
+int Button13 = 0;
+int Button14 = 0;
+int Button15 = 0;
+
+String files[] = {"prev.bmp","play.bmp","next.bmp","mute.bmp","volup.bmp","mic1.bmp","pubg.bmp","dest.bmp","cod.bmp","voldown.bmp","s10.bmp","s20.bmp","s30.bmp","s40.bmp","s50.bmp"};
 int Buttons[] = {Button1,Button2,Button3,Button4,Button5,Button6,Button7,Button8,Button9,Button10,Button11,Button12,Button13,Button14,Button15};
+
+int activeButtonSet = 0;
+int buttons[16][16];
+
+int settingsLoaded = 0;
+char settingsCommand[32];
+char commandValue[32];
+String textBuffer;
+
+int settingsIndex = 0;
 
 void setup() {
   Serial.begin(9600);
@@ -147,23 +157,41 @@ void setup() {
   }
   Serial.println(F("OK!"));
   //Rotate 90 degrees
+
+  //TODO: Fix Adafruit_TFT to apply correct screen dimensions on rotation.
   tft.setRotation(1);
 
+  //Background color
   loadCalibrationSettings();
   if( !settingsLoaded ) {
     tft.fillScreen(WHITE);
     calibrateDisplay();
   }
-
-  //Background color
+  loadButtons();
   tft.fillScreen(BLACK);
-
   drawBoxes();
   bmp();
   getState();
 }
+
 int button = 0;
 
+void loadButtons() {
+  File buttoncfg = SD.open("buttons.cfg");
+  int tempIndex;
+  while ( textBuffer = buttoncfg.readStringUntil('\n') ) {
+    tempIndex = textBuffer.indexOf('=');
+    String command = textBuffer.substring(0, tempIndex);
+    int offset = command.toInt() / 16;
+    int index = command.toInt() % 16;
+    int tempInt = textBuffer.substring(tempIndex + 1).toInt();
+    buttons[offset][index] = tempInt;
+    if (textBuffer.compareTo("") == 0) {
+      break;
+    }
+  }
+  buttoncfg.close();
+}
 
 void loadCalibrationSettings() {
   Serial.println("Loading Settings");
@@ -251,8 +279,8 @@ void calibrateDisplay() {
      }
      lastPressure = pressure;
   }
-  SD.remove("CALIB.cfg");
-  File settings = SD.open("CALIB.cfg", FILE_WRITE);
+  SD.remove("calib.cfg");
+  File settings = SD.open("calib.cfg", FILE_WRITE);
   settings.println("MAXX=" + String(TS_MAXX));
   settings.println("MAXY=" + String(TS_MAXY));
   settings.println("MINX=" + String(TS_MINX));
@@ -273,12 +301,34 @@ void drawBoxes(){
 
 char fileName[100];
 
+int iconInt = 0;
+String iconName;
+File iconBuffer;
+
 void bmp(){
   button = 0;
   for(int j = 0; j<3; j++){
     for(int i = 0; i<5; i++){
-      files[button].toCharArray(fileName,100);
-      bmpDraw(fileName,col[i]+1,row[j]+1);
+      iconInt = (activeButtonSet * 16) + (j * 5) + i;
+      if(activeButtonSet == 0) {
+        iconName = "0";
+        iconName += String(iconInt, HEX);
+      } else {
+        iconName = String(iconInt, HEX);
+      }
+      iconName += ".bmp";
+      iconName.toCharArray(fileName, 100);
+      iconBuffer = SD.open(fileName);
+      if (iconBuffer.available() > 0) {
+        //files[button].toCharArray(fileName,100);
+        bmpDraw(fileName,col[i]+1,row[j]+1);
+      } else {
+//        Serial.println("CYAN: " + String(col[i] + 1) + ", " + String(col[j]+1));
+        //This requires removing the fillRect from the TFT files.
+        tft.fillRect(col[i]+1,row[j]+1,BOXSIZE-2,BOXSIZE-2,BLACK);
+//        Serial.print("No button for ");
+//        Serial.println(fileName);
+      }
       button = button+1;
     }
   }
@@ -309,6 +359,25 @@ void getState(){
   }
 }
 
+void getTouchRaw()
+{
+  digitalWrite(13, HIGH);
+  TSPoint p = ts.getPoint();
+  digitalWrite(13, LOW);
+
+  //If sharing pins, you'll need to fix the directions of the touchscreen pins
+  pinMode(XM, OUTPUT);
+  pinMode(YP, OUTPUT);
+
+  //Smooth our pressure to ensure we have consistent press and release cycles.
+  if (millis() > lastUpdatedTime + 16) {
+    rawX = p.x;
+    rawY = p.y;
+    pressure = (pressure + p.z) / 2;
+    lastUpdatedTime = millis();
+  }
+}
+
 void retrieveTouch()
 {
   digitalWrite(13, HIGH);
@@ -319,44 +388,82 @@ void retrieveTouch()
   pinMode(XM, OUTPUT);
   pinMode(YP, OUTPUT);
 
-  // on my tft the numbers are reversed so this is used instead of the above
-  X = map(p.y, TS_MAXY, TS_MINY, 0, tft.width());
-  Y = map(p.x, TS_MAXX, TS_MINX, 0, tft.height());
-  Z = p.z;
-
+  if (millis() > lastUpdatedTime + 16) {
+    pressure = (pressure + p.z) / 2;
+    lastUpdatedTime = millis();
+    // on my tft the numbers are reversed so this is used instead of the above
+    X = map(p.y, TS_MAXY, TS_MINY, 40, 280);
+    Y = map(p.x, TS_MAXX, TS_MINX, 40, 200);
+    Z = p.z;
+  }
 }
 
+int buttonId = 0;
+int lastButton[] = {NULL, NULL};
+
 void chooseButton(){
-  if (Z > MINPRESSURE && Z < MAXPRESSURE){
+  if (pressure > MINPRESSURE_PRESS && lastPressure <= MINPRESSURE_RELEASE) {
     for(int j = 0; j<3; j++){
       for(int i = 0; i<5; i++){
         if(X > col[i] &&  X < col[i] + BOXSIZE){
           if(Y > row[j] && Y < row[j] + BOXSIZE){
-
-            drawBoxes();
-            tft.drawRect(col[i],row[j],BOXSIZE,BOXSIZE,RED);
-            Serial.println((j*5)+i+1);
+            buttonId = (j * 5) + i;
+            //drawBoxes();
+            //Serial.println((j*5)+i+1);
             val = files[(j*5)+i].charAt(files[(j*5)+i].length()-5);
-            if(val == "1"){
-              Buttons[(j*5)+i] = 0;
-              files[(j*5)+i].replace("1","0");
-              files[(j*5)+i].toCharArray(fileName,100);
-              bmpDraw(fileName,col[i]+1,row[j]+1);
+            switch(buttons[activeButtonSet][buttonId]) {
+              case 0:
+              case 1:
+                //Toggle On/Off
+                buttons[activeButtonSet][buttonId] = !buttons[activeButtonSet][buttonId];
+                iconInt = (activeButtonSet * 16) + buttonId;
+                //Need to fix leading zero
+                if(activeButtonSet == 0) {
+                  iconName = "0";
+                  iconName += String(iconInt, HEX);
+                } else {
+                  iconName = String(iconInt, HEX);
+                }
+                iconName += String(buttons[activeButtonSet][buttonId]);
+                iconName += ".bmp";
+                iconName.toCharArray(fileName, 100);
+                iconBuffer = SD.open(fileName);
+                if (iconBuffer.available() > 0) {
+                  bmpDraw(fileName,col[i]+1,row[j]+1);
+                } else {
+                  Serial.print("No button for ");
+                  Serial.println(fileName);
+                }
+                bmpDraw(fileName,col[i]+1,row[j]+1);
+                tft.drawRect(col[i],row[j],BOXSIZE,BOXSIZE,RED);
+              break;
+              case 2:
+                //Normal Action
+                tft.drawRect(col[i],row[j],BOXSIZE,BOXSIZE,RED);
+              break;
+              case 3:
+                //Folder
+                activeButtonSet = buttonId;
+                tft.drawRect(col[i],row[j],BOXSIZE,BOXSIZE,BLUE);
+                bmp();
+              break;
+              default:
+                //Any other number is a Toggle Group. i.e. a 4 button will toggle all other 4's off and itself on.
+                tft.drawRect(col[i],row[j],BOXSIZE,BOXSIZE,RED);
+              break;
             }
-            if(val == "0"){
-              Buttons[(j*5)+i] = 1;
-              files[(j*5)+i].replace("0","1");
-              files[(j*5)+i].toCharArray(fileName,100);
-              bmpDraw(fileName,col[i]+1,row[j]+1);
+            //Recolor the other red box.
+            if (lastButton[0] != NULL) {
+              tft.drawRect(lastButton[0], lastButton[1],BOXSIZE,BOXSIZE,WHITE);
             }
-            memset(fileName, 0, sizeof newVal);
-            temp = "";
-            delay(50);
+            lastButton[0] = col[i];
+            lastButton[1] = row[j];
           }
         }
       }
     }
   }
+  lastPressure = pressure;
 }
 
 void updateInfo(){
@@ -391,7 +498,7 @@ void updateInfo(){
 #define BUFFPIXEL 20
 
 void bmpDraw(char *filename, int x, int y) {
-
+  
   File     bmpFile;
   int      bmpWidth, bmpHeight;   // W+H in pixels
   uint8_t  bmpDepth;              // Bit depth (currently must be 24)
